@@ -30,4 +30,5 @@ def get_response(personality, request):
     print(input_text)
     inputs = tokenizer.encode(input_text, return_tensors="pt").to(device)
     outputs = model.generate(inputs, max_new_tokens=50, temperature=0.2, top_p=0.9, do_sample=True)
+    
     return tokenizer.decode(outputs[0], skip_special_tokens=True)
