@@ -6,9 +6,34 @@ export default function Home() {
   const [selectedOption, setSelectedOption] = useState("Steve");
   const [inputText, setInputText] = useState("")
   const [submittedText, setSubmittedText] = useState("");
-  const handleSend = () => {
-    setSubmittedText(inputText); 
+  const [loading, setLoading] = useState(false);
+
+  const handleSend = async () => {
+    setLoading(true);
+  
+    try {
+      const response = await fetch("http://localhost:8000/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          { 
+            message: inputText, 
+            personality: selectedOption.toLowerCase(),
+          }
+        ),
+      });
+  
+      const data = await response.json();
+      setSubmittedText(data.response);  // Show the backend's response
+      setInputText("");              // Optional: clear input
+    } catch (error) {
+      console.error("Error sending message:", error);
+      setSubmittedText("Failed to get response.");
+    } finally {
+      setLoading(false);
+    }
   };
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100 p-4">
       <div className="flex items-center gap-x-4 m-5">
