@@ -24,8 +24,8 @@ export default function Home() {
       });
   
       const data = await response.json();
-      setSubmittedText(data.response);  // Show the backend's response
-      setInputText("");              // Optional: clear input
+      setSubmittedText(data.response);
+      setInputText("");
     } catch (error) {
       console.error("Error sending message:", error);
       setSubmittedText("Failed to get response.");

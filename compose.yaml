@@ -21,3 +21,12 @@ services:
       - /app/node_modules
     depends_on:
       - backend
+
+  model:
+    build:
+      context: ./model
+      dockerfile: Dockerfile
+    container_name: smollm2_model
+    ports:
+      - "8001:8001"
+    restart: unless-stopped
