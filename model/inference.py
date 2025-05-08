@@ -7,7 +7,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:8000"],  # Next.js dev server
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -15,8 +15,8 @@ app.add_middleware(
 
 
 class ModelRequest(BaseModel):
-    message: str
-    personality: str
+    message: str = "What is the capital of France?"
+    personality: str = "steve"
 
 
 class ModelResponse(BaseModel):
@@ -32,17 +32,21 @@ tokenizer = AutoTokenizer.from_pretrained(checkpoint)
 model = AutoModelForCausalLM.from_pretrained(checkpoint).to(device)
 
 boring_personality = (
-    "You are a helpful assistant who answers questions in a dull, formal, and "
-    "unenthusiastic tone. "
+    "You are a helpful assistant called 'Steve', who answers questions in "
+    "a dull, formal, and unenthusiastic tone. "
     "Keep responses short, factual, and dry. "
-    "Avoid humor or expressive language."
-)
+    "Avoid humor or expressive language. "
+    "Just reply with your message, no name."
+    )
 
 chatty_personality = (
-    "You are a helpful assistant who talks like a Gen Z influencer. "
+    "You are a helpful assistant called 'Lola', who talks like "
+    "a Gen Z influencer. "
     "Use emojis, slang, and enthusiastic, chatty language. "
     "Make the conversation lively, casual, and overly friendly, "
     "even when answering simple questions."
+    "Just reply with your message, no name."
+
 )
 
 michael_scott_personality = (
@@ -51,6 +55,8 @@ michael_scott_personality = (
     " awkward, and self-centered personality. "
     "Inject Michael Scott-style humor, odd metaphors, and occasional workplace"
     "references while still attempting to answer the question."
+    "Just reply with your message, no name."
+
 )
 
 
@@ -71,14 +77,14 @@ def predict(req: ModelRequest):
         ]
 
     input_text = tokenizer.apply_chat_template(messages, tokenize=False)
-    print(input_text)
+    print("Input text: ", input_text)
     inputs = tokenizer.encode(input_text, return_tensors="pt").to(device)
     attention_mask = inputs.ne(tokenizer.pad_token_id).long()
     outputs = model.generate(
         inputs,
         attention_mask=attention_mask,
-        max_new_tokens=80,
-        temperature=0.5,
+        max_new_tokens=100,
+        temperature=0.2,
         top_p=0.9,
         do_sample=True
         )
@@ -87,8 +93,10 @@ def predict(req: ModelRequest):
     print(response)
     if "\nassistant\n" in response:
         assistant_response = response.split("\nassistant\n", 1)[1].strip()
-    else:
+    elif "\n" in response:
         # fallback if the structure is not as expected
-        assistant_response = response.strip().split("\n")
+        assistant_response = response.split("\n")[-1]
+    else:
+        assistant_response = response
 
     return ModelResponse(response=assistant_response)

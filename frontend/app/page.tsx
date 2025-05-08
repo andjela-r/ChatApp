@@ -24,6 +24,9 @@ export default function Home() {
       });
   
       const data = await response.json();
+      console.log(response)
+      console.log("----")
+      console.log(data)
       setSubmittedText(data.response);
       setInputText("");
     } catch (error) {

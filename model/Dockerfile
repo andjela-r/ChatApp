@@ -10,6 +10,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy your FastAPI app
 COPY . .
 
+# Set Hugging Face cache dir
+ENV HF_HOME=/app/.cache/huggingface
+
+# Download the model at build time
+RUN python -c "from transformers import AutoModelForCausalLM, AutoTokenizer; \
+    AutoTokenizer.from_pretrained('HuggingFaceTB/SmolLM2-360M-Instruct'); \
+    AutoModelForCausalLM.from_pretrained('HuggingFaceTB/SmolLM2-360M-Instruct')"
+
 # Expose FastAPI port
 EXPOSE 8001
 

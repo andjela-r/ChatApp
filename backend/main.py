@@ -7,10 +7,7 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",  # Next.js
-        "http://localhost:8001"
-        ],
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -18,7 +15,7 @@ app.add_middleware(
 
 
 class ChatRequest(BaseModel):
-    message: str
+    message: str = "What is the capital of France?"
     personality: str = "steve"
 
 
@@ -26,34 +23,24 @@ class ChatResponse(BaseModel):
     response: str
 
 
-@app.post("/chat", response_model=ChatResponse)
-def chat_endpoint(request: ChatRequest):
-    if request.personality == "steve":
-        reply = f"I received: {request.message}."
-    elif request.personality == "michael scott":
-        reply = "That's what she said. Just kidding."
-        f"You said: {request.message}"
-    else:
-        reply = f"Gasp. You said: {request.message}"
-    return ChatResponse(response=reply)
-
-
 @app.post("/inference", response_model=ChatResponse)
 async def inference(request: ChatRequest):
     print("Sent message: ", request.message)
-    async with httpx.AsyncClient() as client:
+    timeout = httpx.Timeout(30.0, connect=10.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
         try:
             res = await client.post(
                 "http://smollm2_model:8001/predict",  # model FastAPI endpoint
                 json={
                     "message": request.message,
                     "personality": request.personality
-                }
+                    },
             )
+            print("Response: ", res)
             res.raise_for_status()
             result = res.json()
-            print("Response: ", result)
-            return ChatResponse(response=result["response"])
+            print("Result: ", result)
+            return ChatResponse(response=str(result["response"]))
         except Exception as e:
             return ChatResponse(response=f"Error: {str(e)}")
 
