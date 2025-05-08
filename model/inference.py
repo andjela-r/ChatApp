@@ -2,6 +2,11 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from collections import defaultdict, deque
+
+chat_histories = defaultdict(lambda: deque(maxlen=10))  # {session_id: deque}
+last_personality = {}  # {session_id: personality}
+
 
 app = FastAPI()
 
@@ -62,6 +67,18 @@ michael_scott_personality = (
 
 @app.post("/predict", response_model=ModelResponse)
 def predict(req: ModelRequest):
+
+    # Use session ID — for now, based on a fixed "session" or from the frontend later
+    session_id = "default_session"  # Replace with a real user/session ID when available
+
+    # Reset history if personality changed
+    if session_id not in last_personality or last_personality[session_id] != req.personality:
+        chat_histories[session_id] = deque(maxlen=10)
+        last_personality[session_id] = req.personality
+
+    # Add current message to history
+    chat_histories[session_id].append({"role": "user", "content": req.message})
+
     if req.personality == "steve":
         system_prompt = boring_personality
     elif req.personality == "lola":
@@ -71,10 +88,8 @@ def predict(req: ModelRequest):
     else:
         system_prompt = "You are a helpful assistant."
 
-    messages = [
-        {"role": "system", "content": system_prompt},
-        {"role": "user", "content": req.message}
-        ]
+    # Build full prompt
+    messages = [{"role": "system", "content": system_prompt}] + list(chat_histories[session_id])
 
     input_text = tokenizer.apply_chat_template(messages, tokenize=False)
     print("Input text: ", input_text)
@@ -98,5 +113,9 @@ def predict(req: ModelRequest):
         assistant_response = response.split("\n")[-1]
     else:
         assistant_response = response
+
+    # Save assistant response to history
+    chat_histories[session_id].append({"role": "assistant", "content": assistant_response})
+
 
     return ModelResponse(response=assistant_response)
