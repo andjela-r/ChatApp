@@ -3,6 +3,7 @@ from pydantic import BaseModel
 from fastapi.middleware.cors import CORSMiddleware
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from collections import defaultdict, deque
+import re
 
 chat_histories = defaultdict(lambda: deque(maxlen=10))  # {session_id: deque}
 last_personality = {}  # {session_id: personality}
@@ -30,10 +31,8 @@ class ModelResponse(BaseModel):
 
 checkpoint = "HuggingFaceTB/SmolLM2-360M-Instruct"
 
-device = "cpu"  # for GPU usage or "cpu" for CPU usage
+device = "cpu"  # for GPU usage "cuda" or "cpu" for CPU usage
 tokenizer = AutoTokenizer.from_pretrained(checkpoint)
-# for multiple GPUs install accelerate and do
-# `model = AutoModelForCausalLM.from_pretrained(checkpoint, device_map="auto")`
 model = AutoModelForCausalLM.from_pretrained(checkpoint).to(device)
 
 boring_personality = (
@@ -41,8 +40,8 @@ boring_personality = (
     "a dull, formal, and unenthusiastic tone. "
     "Keep responses short, factual, and dry. "
     "Avoid humor or expressive language. "
-    "Just reply with your message, no name."
-    )
+    "Do NOT include your name in the response."
+)
 
 chatty_personality = (
     "You are a helpful assistant called 'Lola', who talks like "
@@ -50,8 +49,7 @@ chatty_personality = (
     "Use emojis, slang, and enthusiastic, chatty language. "
     "Make the conversation lively, casual, and overly friendly, "
     "even when answering simple questions."
-    "Just reply with your message, no name."
-
+    "Do NOT include your name in the response."
 )
 
 michael_scott_personality = (
@@ -60,25 +58,21 @@ michael_scott_personality = (
     " awkward, and self-centered personality. "
     "Inject Michael Scott-style humor, odd metaphors, and occasional workplace"
     "references while still attempting to answer the question."
-    "Just reply with your message, no name."
-
+    "Do NOT include your name in the response."
 )
 
 
 @app.post("/predict", response_model=ModelResponse)
 def predict(req: ModelRequest):
 
-    # Use session ID — for now, based on a fixed "session" or from the frontend later
-    session_id = "default_session"  # Replace with a real user/session ID when available
+    session_id = "default_session"
 
     # Reset history if personality changed
     if session_id not in last_personality or last_personality[session_id] != req.personality:
         chat_histories[session_id] = deque(maxlen=10)
         last_personality[session_id] = req.personality
 
-    # Add current message to history
-    chat_histories[session_id].append({"role": "user", "content": req.message})
-
+    # Select system prompt
     if req.personality == "steve":
         system_prompt = boring_personality
     elif req.personality == "lola":
@@ -88,12 +82,18 @@ def predict(req: ModelRequest):
     else:
         system_prompt = "You are a helpful assistant."
 
+    # Avoid adding duplicate user message
+    if not chat_histories[session_id] or chat_histories[session_id][-1] != {"role": "user", "content": req.message}:
+        chat_histories[session_id].append({"role": "user", "content": req.message})
+
     # Build full prompt
     messages = [{"role": "system", "content": system_prompt}] + list(chat_histories[session_id])
 
     input_text = tokenizer.apply_chat_template(messages, tokenize=False)
-    print("Input text: ", input_text)
+    # print("Input text: ", input_text)
     inputs = tokenizer.encode(input_text, return_tensors="pt").to(device)
+    # Generate response
+    input_len = inputs.shape[-1]
     attention_mask = inputs.ne(tokenizer.pad_token_id).long()
     outputs = model.generate(
         inputs,
@@ -105,17 +105,20 @@ def predict(req: ModelRequest):
         )
     print("-----------------------")
     response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    print(response)
-    if "\nassistant\n" in response:
-        assistant_response = response.split("\nassistant\n", 1)[1].strip()
-    elif "\n" in response:
-        # fallback if the structure is not as expected
-        assistant_response = response.split("\n")[-1]
-    else:
-        assistant_response = response
+    print("Full response: ", response)
+    # Decode only the new tokens
+    output_tokens = outputs[0][input_len:]
+    assistant_response = tokenizer.decode(output_tokens, skip_special_tokens=True).strip()
 
-    # Save assistant response to history
-    chat_histories[session_id].append({"role": "assistant", "content": assistant_response})
+    # Optionally remove speaker prefix (e.g., "Steve: ")
+    assistant_response = re.sub(r"^\s*\w+:\s*", "", assistant_response)
 
+    assistant_response = re.split(r"\n*assistant\n*", assistant_response)[-1].strip()
+
+    # Avoid duplicate assistant messages
+    if not chat_histories[session_id] or chat_histories[session_id][-1] != {"role": "assistant", "content": assistant_response}:
+        chat_histories[session_id].append({"role": "assistant", "content": assistant_response})
+
+    print("---End of response---")
 
     return ModelResponse(response=assistant_response)
