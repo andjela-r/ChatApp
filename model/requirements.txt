@@ -3,3 +3,4 @@ pydantic
 transformers
 torch
 huggingface_hub[hf_xet]
+langfuse

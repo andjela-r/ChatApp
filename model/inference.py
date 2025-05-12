@@ -4,11 +4,19 @@ from fastapi.middleware.cors import CORSMiddleware
 from transformers import AutoModelForCausalLM, AutoTokenizer
 from collections import defaultdict, deque
 import re
+from langfuse import Langfuse
+from langfuse.decorators import observe, langfuse_context
+
 
 chat_histories = defaultdict(lambda: deque(maxlen=10))  # {session_id: deque}
 last_personality = {}  # {session_id: personality}
 
 
+langfuse = Langfuse(
+  secret_key="sk-lf-89c68fe1-7086-4713-bbbc-72ffc9087d0a",
+  public_key="pk-lf-9424b7e5-8f1f-4bf7-81dd-92c2d4dd6101",
+  host="http://localhost:3000"
+)
 app = FastAPI()
 
 app.add_middleware(
@@ -61,7 +69,7 @@ michael_scott_personality = (
     "Do NOT include your name in the response."
 )
 
-
+@observe(as_type="generation")
 @app.post("/predict", response_model=ModelResponse)
 def predict(req: ModelRequest):
 
